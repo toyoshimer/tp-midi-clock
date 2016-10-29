@@ -62,6 +62,12 @@
       _starttime: 0,
       _tickduration: 0,
       _running: false,
+      _lastclick: 0,
+      _ctx: null,
+      _oscH: null,
+      _gainH: null,
+      _oscL: null,
+      _gainL: null,
       
       _animation: function () {
         // FIXME: would have a nice UI to display current MIDI time.
@@ -70,6 +76,28 @@
           window.requestAnimationFrame(this._animation.bind(this));
       },
       
+      _timer: function () {
+        if (!this._running)
+          return;
+        var now = performance.now();
+        var delta = now - this._starttime;
+        var tick = (delta / this._tickduration) | 0;
+        if (tick > this._lastclick) {
+          var resolution = this.get('resolution');
+          this._lastclick = tick - (tick % resolution) + resolution;
+          var timestamp = this._starttime + this._lastclick * this._tickduration;
+          var audiotime = this._ctx.currentTime + (timestamp - now) / 1000;
+          if (resolution != (this._lastclick % (resolution * this.get('beat')))) {
+            this._gainL.gain.setValueAtTime(1, audiotime);
+            this._gainL.gain.linearRampToValueAtTime(0, audiotime + 0.05);
+          } else {
+            this._gainH.gain.setValueAtTime(1, audiotime);
+            this._gainH.gain.linearRampToValueAtTime(0, audiotime + 0.05);
+          }
+        }
+        setTimeout(this._timer.bind(this), 10);
+      },
+
       attached: function () {
         this.$.startbutton.addEventListener('click', function (e) {
           this.start();
@@ -81,18 +109,41 @@
 
       /* Starts clocking. */
       start: function () {
-        this._starttime = performance.now();
+        this._starttime = performance.now() + 10;
         var beatduration = 60 * 1000 / this.get('tempo');
         this._tickduration = beatduration / this.get('resolution');
 
         this._running = true;
         if (this.get('display') != 'none')
           window.requestAnimationFrame(this._animation.bind(this));
+
+        if (this.get('click')) {
+          this._ctx = new AudioContext();
+
+          this._oscH = this._ctx.createOscillator();
+          this._oscH.frequency.value = 1200;
+          this._gainH = this._ctx.createGain();
+          this._gainH.gain.value = 0;
+          this._oscH.connect(this._gainH).connect(this._ctx.destination);
+          this._oscH.start();
+
+          this._oscL = this._ctx.createOscillator();
+          this._oscL.frequency.value = 600;
+          this._gainL = this._ctx.createGain();
+          this._gainL.gain.value = 0;
+          this._oscL.connect(this._gainL).connect(this._ctx.destination);
+          this._oscL.start();
+
+          this._lastclick = -24;
+          this._timer();
+        }
       },
 
       /* Stops clocking. */
       stop: function () {
         this._running = false;
+        if (this._osc)
+          this._osc.stop();
       },
 
       /**
