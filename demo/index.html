@@ -1,0 +1,50 @@
+<!doctype html>
+<html>
+  <head>
+    <title>x-midi-clock demo</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, minimum-scale=1.0, initial-scale=1, user-scalable=yes">
+    <script src="../../webcomponentsjs/webcomponents-lite.js"></script>
+
+    <link rel="import" href="../../iron-demo-helpers/demo-pages-shared-styles.html">
+    <link rel="import" href="../../iron-demo-helpers/demo-snippet.html">
+
+    <link rel="import" href="../x-midi-clock.html">
+
+    <style is="custom-style" include="demo-pages-shared-styles">
+    </style>
+  </head>
+  <body>
+
+    <div class="vertical-section-container centered">
+      <h3>Basic x-midi-clock Demo</h3>
+      <demo-snippet>
+        <template>
+          <x-midi-clock id='clock'></x-midi-clock>
+          <script>
+            var on;
+            navigator.requestMIDIAccess().then(a => {
+              for (var port of a.inputs.values()) {
+                port.addEventListener('midimessage', e => {
+                  if (e.data[0] == 0xf8 || e.data[0] == 0xfe)
+                    return;
+                  if (e.data[0] == 0x90 && e.data[2] == 0)
+                    e.data[0] = 0x80;
+                  var clock = document.getElementById('clock');
+                  if (e.data[0] == 0x90) {
+                    on = clock.convertTimeStampToMidiTime(e.timeStamp);
+                  } else if (e.data[0] == 0x80) {
+                    var off = clock.convertTimeStampToMidiTime(e.timeStamp);
+                    var duration = clock.duration(on, off);
+                    console.log(on, duration);
+                  }
+                });
+              }
+            })
+          </script>
+        </template>
+      </demo-snippet>
+    </div>
+
+  </body>
+</html>

@@ -1,0 +1,165 @@
+<link rel="import" href="../polymer/polymer.html">
+
+<!--
+`x-midi-clock`
+
+
+@demo demo/index.html 
+-->
+
+<dom-module id="x-midi-clock">
+  <template>
+    <style>
+      :host {
+        display: [[display]];
+      }
+    </style>
+    <div>
+      <!-- FIXME: Have a nice design -->
+      <button style="width: 32px; height:32px;" id='stopbutton'>⬜</button>
+      <button style="width: 32px; height:32px;" id='startbutton'>▷</button>
+    </div>
+  </template>
+
+  <script>
+    Polymer({
+
+      is: 'x-midi-clock',
+
+      properties: {
+        /* Used in style display. Would be 'block' or 'none' for usual cases. */
+        display: {
+          type: String,
+          value: 'block',
+        },
+        /* Specifies tempo, beats in a minute. */
+        tempo: {
+          type: Number,
+          value: 120,
+        },
+        /* Specifies beats. */
+        beat: {
+          type: Number,
+          value: 4,
+        },
+        /* Specifies time resolution for each beat. */
+        resolution: {
+          type: Number,
+          value: 24,
+        },
+        /* Generate click sounds if true is given. */
+        click: {
+          type: Boolean,
+          value: true,
+        },
+        /* Specifies measures that are counted before starting actual clock. */
+        countdown: {
+          type: Number,
+          value: 2,
+        },
+      },
+
+      _starttime: 0,
+      _tickduration: 0,
+      _running: false,
+      
+      _animation: function () {
+        // FIXME: would have a nice UI to display current MIDI time.
+        // console.log(this.convertTimeStampToMidiTime(performance.now()));
+        if (this._running)
+          window.requestAnimationFrame(this._animation.bind(this));
+      },
+      
+      attached: function () {
+        this.$.startbutton.addEventListener('click', function (e) {
+          this.start();
+        }.bind(this), false);
+        this.$.stopbutton.addEventListener('click', function (e) {
+          this.stop();
+        }.bind(this), false);
+      },
+
+      /* Starts clocking. */
+      start: function () {
+        this._starttime = performance.now();
+        var beatduration = 60 * 1000 / this.get('tempo');
+        this._tickduration = beatduration / this.get('resolution');
+
+        this._running = true;
+        if (this.get('display') != 'none')
+          window.requestAnimationFrame(this._animation.bind(this));
+      },
+
+      /* Stops clocking. */
+      stop: function () {
+        this._running = false;
+      },
+
+      /**
+       * Converts DOMHighResTimeStamp to MidiTime.
+       * @param {DOMHighResTimeStamp} timestamp
+       * @return {MidiTime}
+       */
+      convertTimeStampToMidiTime: function (timestamp) {
+        var delta = timestamp - this._starttime;
+        var totaltick = (delta / this._tickduration) | 0;
+        return this.convertTickToMidiTime(totaltick);
+      },
+
+      /**
+       * Converts tick count to MidiTime.
+       * @param {number} tick
+       * @return {MidiTime}
+       */
+      convertTickToMidiTime: function (tick) {
+        var result = {
+          measure: 0,
+          beat: 0,
+          tick: 0
+        };
+        result.tick = tick % this.get('resolution');
+        tick = (tick - result.tick) / this.get('resolution');
+        result.beat = tick % this.get('beat');
+        result.measure = (tick - result.beat) / this.get('beat');
+        result.measure -= this.get('countdown');
+        return result;
+      },
+
+
+      /**
+       * Converts MidiTime to tick count.
+       * @param {MidiTime} time
+       * @return {number}
+       */
+      convertMidiTimeToTick: function (time) {
+        var beat = time.measure * this.get('beat') + time.beat;
+        return beat * this.get('resolution') + time.tick;
+      },
+
+      /**
+       * Calculates duratoin tick count between |from| and |to|.
+       * @param {MidiTime} from
+       * @param {MidiTime} to
+       * @return {number}
+       */
+      duration: function (from, to) {
+        var start = this.convertMidiTimeToTick(from);
+        var end = this.convertMidiTimeToTick(to);
+        return end - start;
+      },
+      
+      /**
+       * Calculates note off MidiTime from note on MidiTime and duration tick.
+       * @param {MidiTime} time
+       * @param {number} tick
+       * @return {MidiTime}
+       */
+      calculateNoteOffMidiTime: function (time, tick) {
+        var endtick = this.convertMidiTimeToTick(time) + tick;
+        var offset =
+            this.get('countdown') * this.get('beat') * this.get('resolution');
+        return this.convertTickToMidiTime(endtick + offset);
+      }
+    });
+  </script>
+</dom-module>
