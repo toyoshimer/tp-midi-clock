@@ -142,8 +142,8 @@
       /* Stops clocking. */
       stop: function () {
         this._running = false;
-        if (this._osc)
-          this._osc.stop();
+        this._oscL && this._oscL.stop();
+        this._oscH && this._oscH.stop();
       },
 
       /**
