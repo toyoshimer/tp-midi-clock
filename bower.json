@@ -1,6 +1,6 @@
 {
-  "name": "x-midi-clock",
-  "main": "x-midi-clock.html",
+  "name": "tp-midi-clock",
+  "main": "tp-midi-clock.html",
   "dependencies": {
     "polymer": "Polymer/polymer#^1.4.0"
   },

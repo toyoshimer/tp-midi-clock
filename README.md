@@ -1,4 +1,4 @@
-# \<x-midi-clock\>
+# \<tp-midi-clock\>
 
 
 

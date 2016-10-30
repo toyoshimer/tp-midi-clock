@@ -1,13 +1,13 @@
 <link rel="import" href="../polymer/polymer.html">
 
 <!--
-`x-midi-clock`
+`tp-midi-clock`
 
 
 @demo demo/index.html 
 -->
 
-<dom-module id="x-midi-clock">
+<dom-module id="tp-midi-clock">
   <template>
     <style>
       :host {
@@ -24,25 +24,31 @@
   <script>
     Polymer({
 
-      is: 'x-midi-clock',
+      is: 'tp-midi-clock',
 
       properties: {
+        /* Provides web audio functionality. */
+        audioContext: {
+          type: Object,
+          value: null,
+        },
         /* Used in style display. Would be 'block' or 'none' for usual cases. */
         display: {
           type: String,
           value: 'block',
         },
-        /* Specifies tempo, beats in a minute. */
+        /* Specifies tempo, beats in a minute. Can be changed dynamically. */
         tempo: {
           type: Number,
           value: 120,
+          observer: '_tempoChanged',
         },
-        /* Specifies beats. */
+        /* Specifies beats. Cannot be changed dynamically now. */
         beat: {
           type: Number,
           value: 4,
         },
-        /* Specifies time resolution for each beat. */
+        /* Specifies time resolution for each beat. Cannot be chaned dynamically now.*/
         resolution: {
           type: Number,
           value: 24,
@@ -52,7 +58,10 @@
           type: Boolean,
           value: true,
         },
-        /* Specifies measures that are counted before starting actual clock. */
+        /**
+         * Specifies measures that are counted before starting actual clock.
+         * Cannot be changed dynamically.
+         */
         countdown: {
           type: Number,
           value: 2,
@@ -68,14 +77,16 @@
       _gainH: null,
       _oscL: null,
       _gainL: null,
-      
+      _inputIdx: 0,
+      _outputIdx: 0,
+
       _animation: function () {
         // FIXME: would have a nice UI to display current MIDI time.
         // console.log(this.convertTimeStampToMidiTime(performance.now()));
         if (this._running)
           window.requestAnimationFrame(this._animation.bind(this));
       },
-      
+
       _timer: function () {
         if (!this._running)
           return;
@@ -85,17 +96,33 @@
         if (tick > this._lastclick) {
           var resolution = this.get('resolution');
           this._lastclick = tick - (tick % resolution) + resolution;
-          var timestamp = this._starttime + this._lastclick * this._tickduration;
-          var audiotime = this._ctx.currentTime + (timestamp - now) / 1000;
-          if (resolution != (this._lastclick % (resolution * this.get('beat')))) {
-            this._gainL.gain.setValueAtTime(1, audiotime);
-            this._gainL.gain.linearRampToValueAtTime(0, audiotime + 0.05);
-          } else {
-            this._gainH.gain.setValueAtTime(1, audiotime);
-            this._gainH.gain.linearRampToValueAtTime(0, audiotime + 0.05);
+          var timestamp =
+              this._starttime + this._lastclick * this._tickduration;
+          var audiotime =
+              this._ctx.currentTime + (timestamp - now) / 1000;
+          if (this.get('click')) {
+            if (resolution !=
+                (this._lastclick % (resolution * this.get('beat')))) {
+              this._gainL.gain.setValueAtTime(1, audiotime);
+              this._gainL.gain.linearRampToValueAtTime(0, audiotime + 0.05);
+            } else {
+              this._gainH.gain.setValueAtTime(1, audiotime);
+              this._gainH.gain.linearRampToValueAtTime(0, audiotime + 0.05);
+            }
           }
         }
+        // FIXME: Adjust timer interval to follow tempo in minimum cost.
         setTimeout(this._timer.bind(this), 10);
+      },
+
+      _tempoChanged: function () {
+        var timestamp = performance.now();
+        var time = this.convertTimeStampToMidiTime(timestamp);
+        time.measure += this.get('countdown');
+        var tick = this.convertMidiTimeToTick(time);
+        var beatduration = 60 * 1000 / this.get('tempo');
+        this._tickduration = beatduration / this.get('resolution');
+        this._starttime = timestamp - tick * this._tickduration;
       },
 
       attached: function () {
@@ -109,6 +136,7 @@
 
       /* Starts clocking. */
       start: function () {
+        this.stop();
         this._starttime = performance.now() + 10;
         var beatduration = 60 * 1000 / this.get('tempo');
         this._tickduration = beatduration / this.get('resolution');
@@ -118,8 +146,9 @@
           window.requestAnimationFrame(this._animation.bind(this));
 
         if (this.get('click')) {
-          this._ctx = new AudioContext();
-
+          this._ctx = this.get('audioContext');
+          if (!this._ctx)
+            this._ctx = new AudioContext();
           this._oscH = this._ctx.createOscillator();
           this._oscH.frequency.value = 1200;
           this._gainH = this._ctx.createGain();
@@ -158,6 +187,16 @@
       },
 
       /**
+       * Converts MidiTime to DOMHighResTimeStamp.
+       * @param {MidiTime} time
+       * @param {DOMHighResTimeStamp}
+       */
+      convertMidiTimeToTimeStamp: function (time) {
+        var tick = this.convertMidiTimeToTick(time);
+        return this._starttime + tick * this._tickduration;
+      },
+
+      /**
        * Converts tick count to MidiTime.
        * @param {number} tick
        * @return {MidiTime}
@@ -175,7 +214,6 @@
         result.measure -= this.get('countdown');
         return result;
       },
-
 
       /**
        * Converts MidiTime to tick count.
@@ -198,7 +236,7 @@
         var end = this.convertMidiTimeToTick(to);
         return end - start;
       },
-      
+
       /**
        * Calculates note off MidiTime from note on MidiTime and duration tick.
        * @param {MidiTime} time
